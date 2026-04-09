@@ -5,9 +5,9 @@ from textblob import TextBlob
 import numpy as np
  
 # --- 1. LOAD THE BRAIN ---
-model = joblib.load('attrition_model.pkl')
+model = joblib.load('attrition_xgb_model.pkl')
 scaler = joblib.load('robust_scaler.pkl')
-core_features = joblib.load('core_features.pkl')
+core_features = joblib.load('features_columns.pkl')
  
 st.title("🛡️ HR Employee Retention Tool")
 st.write("Upload a CSV file to identify which employees are likely to leave.")
