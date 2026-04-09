@@ -7,7 +7,7 @@ import numpy as np
 # --- 1. LOAD THE BRAIN ---
 model = joblib.load('attrition_xgb_model.pkl')
 scaler = joblib.load('robust_scaler.pkl')
-core_features = joblib.load('features_columns.pkl')
+core_features = joblib.load('feature_columns.pkl')
  
 st.title("🛡️ HR Employee Retention Tool")
 st.write("Upload a CSV file to identify which employees are likely to leave.")
