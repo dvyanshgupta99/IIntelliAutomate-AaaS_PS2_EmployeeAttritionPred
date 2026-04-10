@@ -11,9 +11,9 @@ st.set_page_config(page_title="HR AI Risk Dashboard", layout="wide")
 @st.cache_resource
 def load_assets():
     try:
-        model = joblib.load('attrition_model.pkl')
+        model = joblib.load('attrition_xgb_model.pkl')
         scaler = joblib.load('robust_scaler.pkl')
-        features = joblib.load('core_features.pkl')
+        core_features = joblib.load('feature_columns.pkl')
         return model, scaler, features
     except:
         st.error("Model files not found. Please upload .pkl files to the app directory.")
