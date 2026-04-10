@@ -2,119 +2,125 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
+import plotly.express as px
 from textblob import TextBlob
- 
-# --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="HR AI Attrition Predictor", layout="wide")
- 
-# --- 1. LOAD ASSETS (The 'Brain' from Kaggle) ---
+
+# --- 1. CONFIGURATION ---
+st.set_page_config(page_title="HR AI Risk Dashboard", layout="wide")
+
 @st.cache_resource
 def load_assets():
     try:
-        model = joblib.load('attrition_xgb_model.pkl')
+        model = joblib.load('attrition_model.pkl')
         scaler = joblib.load('robust_scaler.pkl')
-        core_features = joblib.load('feature_columns.pkl')
-        return model, scaler, core_features
-    except FileNotFoundError:
-        st.error("⚠️ Error: Missing .pkl files! Ensure 'attrition_model.pkl', 'robust_scaler.pkl', and 'core_features.pkl' are in the same folder.")
+        features = joblib.load('core_features.pkl')
+        return model, scaler, features
+    except:
+        st.error("Model files not found. Please upload .pkl files to the app directory.")
         return None, None, None
- 
+
 model, scaler, core_features = load_assets()
- 
-# --- 2. THE UI HEADER ---
-st.title("🛡️ AI-Driven Employee Retention Dashboard")
-st.markdown("""
-Upload your employee survey and compensation data to identify flight risks and receive automated intervention strategies.
-""")
- 
-# --- 3. SIDEBAR TEMPLATE DOWNLOAD ---
-with st.sidebar:
-    st.header("App Instructions")
-    st.write("1. Upload a CSV with employee data.")
-    st.write("2. The AI will calculate risk scores.")
-    st.write("3. Download the Actionable Report.")
-    # Mock data for template download
-    template_data = pd.DataFrame({
-        'Employee_ID': ['EMP001'], 'Department': ['Sales'], 'Role': ['Manager'], 
-        'Work_Location': ['Remote'], 'Base_Salary': [70000], 'Benchmark_Salary': [75000],
-        'Job_Satisfaction': [3], 'Engagement_Level': [3], 'Work_Life_Balance': [3], 
-        'Management_Support': [3], 'Career_Development': [3], 'Tenure_Years': [2.5], 
-        'Employment_Type': ['Full-time'], 'Feedback_Comments': ['Sample feedback here.']
-    })
-    st.download_button("📥 Download CSV Template", template_data.to_csv(index=False), "hr_template.csv")
- 
-# --- 4. FILE UPLOADER ---
-uploaded_file = st.file_uploader("Upload Employee Data (CSV Format)", type="csv")
- 
-if uploaded_file is not None and model is not None:
-    # Read uploaded data
+
+# --- 2. HEADER & FILE UPLOAD ---
+st.title("🛡️ Employee Retention Strategy AI")
+uploaded_file = st.file_uploader("Upload New HR Data (CSV)", type="csv")
+
+if uploaded_file and model:
+    # Load and Process Data
     df = pd.read_csv(uploaded_file)
-    with st.spinner('AI is analyzing flight risk factors...'):
-        # --- 5. FEATURE ENGINEERING (Science Step) ---
+    
+    with st.spinner('Calculating Risk Scores...'):
         df_proc = df.copy()
-        # Financial & Stagnation Math
+        # Feature Engineering
         df_proc['Comp_Ratio'] = df_proc['Base_Salary'] / (df_proc['Benchmark_Salary'] + 1)
         df_proc['Stagnation_Index'] = df_proc['Tenure_Years'] / (df_proc['Career_Development'] + 0.1)
         df_proc['Is_Contractor'] = np.where(df_proc['Employment_Type'] == 'Contract', 1, 0)
-        # NLP Sentiment Analysis
         df_proc['Survey_Sentiment'] = df_proc['Feedback_Comments'].apply(
             lambda x: TextBlob(str(x)).sentiment.polarity if pd.notnull(x) else 0.0
         )
- 
-        # --- 6. MACHINE LEARNING PREDICTION ---
-        # Select and Scale features
-        X_active = df_proc[core_features]
-        X_scaled = scaler.transform(X_active)
-        # Get Probabilities
-        risk_probs = model.predict_proba(X_scaled)[:, 1]
-        df_proc['Risk_Score_%'] = (risk_probs * 100).round(1)
- 
-        # --- 7. STRATEGY ENGINE (Risk Tiers & Actions) ---
-        def assign_strategy(row):
+        
+        # Prediction
+        X_scaled = scaler.transform(df_proc[core_features])
+        df_proc['Risk_Score_%'] = (model.predict_proba(X_scaled)[:, 1] * 100).round(1)
+
+        # Strategy Engine
+        def get_strategy(row):
             score = row['Risk_Score_%']
             if score >= 75:
                 tier = 'High Risk (Critical)'
-                if row['Comp_Ratio'] < 0.9: 
-                    action = 'Urgent Salary Correction'
-                elif row['Management_Support'] < 3: 
-                    action = 'Skip-Level Meeting / Manager Review'
-                else: 
-                    action = 'Immediate Stay Interview'
+                action = 'Urgent Salary Correction' if row['Comp_Ratio'] < 0.9 else 'Immediate Stay Interview'
             elif score >= 40:
                 tier = 'Medium Risk (Monitor)'
-                action = 'Engagement Project / Flex Work'
+                action = 'Engagement Check-in'
             else:
                 tier = 'Low Risk (Stable)'
                 action = 'Standard Engagement'
             return pd.Series([tier, action])
- 
-        df_proc[['Risk_Tier', 'Recommended_Action']] = df_proc.apply(assign_strategy, axis=1)
- 
-    # --- 8. RESULTS DASHBOARD ---
+
+        df_proc[['Risk_Tier', 'Recommended_Action']] = df_proc.apply(get_strategy, axis=1)
+
+    # --- 3. TOP LEVEL METRICS ---
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total Workforce", len(df_proc))
+    m2.metric("Critical Risks", len(df_proc[df_proc['Risk_Tier'] == 'High Risk (Critical)']))
+    m3.metric("Avg Risk Score", f"{df_proc['Risk_Score_%'].mean().round(1)}%")
+
+    # --- 4. INTERACTIVE DASHBOARD ---
     st.divider()
-    # Summary Metrics
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Employees Analyzed", len(df_proc))
-    col2.metric("Critical Risks Detected", len(df_proc[df_proc['Risk_Tier'] == 'High Risk (Critical)']))
-    col3.metric("Average Risk Score", f"{df_proc['Risk_Score_%'].mean().round(1)}%")
- 
-    # Results Table
-    st.subheader("📋 Employee Triage List")
-    display_cols = ['Employee_ID', 'Department', 'Risk_Score_%', 'Risk_Tier', 'Recommended_Action']
-    st.dataframe(
-        df_proc[display_cols].sort_values(by='Risk_Score_%', ascending=False),
-        use_container_width=True
+    st.header("📊 Interactive Drill-Down Analysis")
+    st.info("Step 1: Click the **Red Slice (High Risk)** to view departments.")
+
+    # LEVEL 1: GLOBAL PIE
+    tier_counts = df_proc['Risk_Tier'].value_counts().reset_index()
+    tier_counts.columns = ['Risk_Tier', 'Count']
+    
+    fig_global = px.pie(
+        tier_counts, values='Count', names='Risk_Tier', hole=0.4,
+        title="Global Risk Distribution",
+        color='Risk_Tier',
+        color_discrete_map={'High Risk (Critical)': '#d32f2f', 'Medium Risk (Monitor)': '#f57c00', 'Low Risk (Stable)': '#2e7d32'}
     )
- 
-    # Export Button
+    
+    global_sel = st.plotly_chart(fig_global, use_container_width=True, on_select="rerun")
+
+    # LEVEL 2: DEPARTMENT PIE
+    if global_sel and len(global_sel["selection"]["points"]) > 0:
+        clicked_tier = global_sel["selection"]["points"][0]["label"]
+        
+        if clicked_tier == 'High Risk (Critical)':
+            st.subheader(f"🔥 Critical Risk: Departmental Breakdown")
+            st.info("Step 2: Click a **Department slice** to see top 10 individual records.")
+            
+            crit_df = df_proc[df_proc['Risk_Tier'] == 'High Risk (Critical)']
+            dept_counts = crit_df['Department'].value_counts().reset_index()
+            dept_counts.columns = ['Department', 'Count']
+            
+            fig_dept = px.pie(
+                dept_counts, values='Count', names='Department',
+                title="Critical Employees by Department",
+                color_discrete_sequence=px.colors.sequential.Reds_r
+            )
+            
+            dept_sel = st.plotly_chart(fig_dept, use_container_width=True, on_select="rerun")
+
+            # LEVEL 3: TABULAR DATA (10 RECORDS)
+            if dept_sel and len(dept_sel["selection"]["points"]) > 0:
+                clicked_dept = dept_sel["selection"]["points"][0]["label"]
+                
+                st.markdown(f"#### 📋 Top 10 Critical Employees in {clicked_dept}")
+                
+                # Filter, Sort, and Slice
+                dept_table = crit_df[crit_df['Department'] == clicked_dept].sort_values(
+                    by='Risk_Score_%', ascending=False
+                ).head(10)
+                
+                st.table(dept_table[['Employee_ID', 'Role', 'Risk_Score_%', 'Recommended_Action']])
+                st.caption(f"Displaying top 10 highest-risk individuals in the {clicked_dept} department.")
+        else:
+            st.write(f"Selection: **{clicked_tier}**. No further drill-down required for stable segments.")
+
+    # --- 5. EXPORT ---
     st.divider()
-    st.subheader("💾 Export Actionable Data")
-    csv_data = df_proc.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="Download Full Actionable Report (CSV)",
-        data=csv_data,
-        file_name='Actionable_HR_Attrition_Report.csv',
-        mime='text/csv'
-    )
-else:
-    st.info("Please upload a CSV file to begin the analysis.")
+    if st.button("Generate Final CSV Report"):
+        csv = df_proc.to_csv(index=False).encode('utf-8')
+        st.download_button("Download Full Actionable Report", csv, "HR_Strategy_Report.csv", "text/csv")
