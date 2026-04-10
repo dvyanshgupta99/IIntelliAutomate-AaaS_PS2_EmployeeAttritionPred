@@ -5,3 +5,4 @@ joblib
 textblob
 scikit-learn
 xgboost
+plotly
