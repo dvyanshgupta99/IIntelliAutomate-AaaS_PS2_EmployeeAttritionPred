@@ -14,7 +14,7 @@ def load_assets():
         model = joblib.load('attrition_xgb_model.pkl')
         scaler = joblib.load('robust_scaler.pkl')
         core_features = joblib.load('feature_columns.pkl')
-        return model, scaler, features
+        return model, scaler, core_features
     except:
         st.error("Model files not found. Please upload .pkl files to the app directory.")
         return None, None, None
